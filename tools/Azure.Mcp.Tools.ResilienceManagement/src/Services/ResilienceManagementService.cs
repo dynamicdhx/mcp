@@ -556,6 +556,38 @@ public sealed class ResilienceManagementService(IAzureService azureService)
         return document.RootElement.Clone();
     }
 
+    public async Task<IEnumerable<ResourceSummary>> ListDrillRunsAsync(string serviceGroup, string drill, string? tenant = null, RetryPolicyOptions? retryPolicy = null, CancellationToken cancellationToken = default)
+    {
+        ArmClient armClient = await CreateArmClientAsync(tenantIdOrName: tenant, retryPolicy: retryPolicy, cancellationToken: cancellationToken);
+
+        var drillId = ResilienceManagementDrillResource.CreateResourceIdentifier(serviceGroup, drill);
+        ResilienceManagementDrillResource drillResource = await armClient.GetResilienceManagementDrillResource(drillId).GetAsync(cancellationToken);
+        DrillRunCollection drillRuns = drillResource.GetDrillRuns();
+
+        var result = new List<ResourceSummary>();
+        await foreach (var drillRun in drillRuns.GetAllAsync(cancellationToken: cancellationToken))
+        {
+            result.Add(new ResourceSummary(
+                Id: drillRun.Data.Id?.ToString() ?? string.Empty,
+                Name: drillRun.Data.Name ?? string.Empty));
+        }
+
+        return result;
+    }
+
+    public async Task<JsonElement> GetDrillRunAsync(string serviceGroup, string drill, string drillRun, string? tenant = null, RetryPolicyOptions? retryPolicy = null, CancellationToken cancellationToken = default)
+    {
+        ArmClient armClient = await CreateArmClientAsync(tenantIdOrName: tenant, retryPolicy: retryPolicy, cancellationToken: cancellationToken);
+
+        var drillId = ResilienceManagementDrillResource.CreateResourceIdentifier(serviceGroup, drill);
+        ResilienceManagementDrillResource drillResource = await armClient.GetResilienceManagementDrillResource(drillId).GetAsync(cancellationToken);
+        DrillRunCollection drillRuns = drillResource.GetDrillRuns();
+        Response<DrillRunResource> response = await drillRuns.GetAsync(drillRun, cancellationToken);
+
+        using JsonDocument document = JsonDocument.Parse(response.GetRawResponse().Content.ToMemory());
+        return document.RootElement.Clone();
+    }
+
     private static Dictionary<string, string>? GetTagsOrNull(JsonElement root)
     {
         if (!root.TryGetProperty("tags", out JsonElement tagsElement) || tagsElement.ValueKind != JsonValueKind.Object)

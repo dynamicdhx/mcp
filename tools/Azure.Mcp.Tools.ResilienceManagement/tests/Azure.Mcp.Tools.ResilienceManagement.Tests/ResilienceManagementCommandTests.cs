@@ -124,6 +124,52 @@ public class ResilienceManagementCommandTests(ITestOutputHelper output, TestProx
     }
 
     [Fact]
+    public async Task Should_list_drill_runs()
+    {
+        var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable("serviceGroupName", "SERVICEGROUPNAME");
+        var drill = RegisterOrRetrieveDeploymentOutputVariable("drillName", "DRILLNAME");
+
+        var result = await CallToolAsync(
+            "resilience_drill_run_get",
+            new()
+            {
+                { "tenant", Settings.TenantId },
+                { "service-group", serviceGroup },
+                { "drill", drill }
+            });
+
+        var drillRuns = result.AssertProperty("drillRuns");
+        Assert.Equal(JsonValueKind.Array, drillRuns.ValueKind);
+    }
+
+    [Fact]
+    public async Task Should_report_not_found_for_drill_run_resources_when_run_does_not_exist()
+    {
+        // The test drill has never been executed (starting a run requires additional RBAC roles
+        // that aren't provisioned for the test identity), so no drill run exists to list resources
+        // for. This test instead verifies that the command surfaces a clear not-found error for a
+        // drill run name that doesn't exist.
+        var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable("serviceGroupName", "SERVICEGROUPNAME");
+        var drill = RegisterOrRetrieveDeploymentOutputVariable("drillName", "DRILLNAME");
+        const string nonExistentDrillRun = "does-not-exist";
+
+        var result = await CallToolAsync(
+            "resilience_drill_run_resource_get",
+            new()
+            {
+                { "tenant", Settings.TenantId },
+                { "service-group", serviceGroup },
+                { "drill", drill },
+                { "drill-run", nonExistentDrillRun }
+            },
+            resultProcessor: elem => elem); // Don't try to extract "results" property since we expect an error response with a different structure
+
+        Assert.NotNull(result);
+        Assert.Equal(404, result.Value.AssertProperty("status").GetInt32());
+        Assert.Contains("not found", result.Value.AssertProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task Should_list_goal_resources()
     {
         var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable("serviceGroupName", "SERVICEGROUPNAME");

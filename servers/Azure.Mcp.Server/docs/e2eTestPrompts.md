@@ -900,6 +900,8 @@ This file contains prompts used for end-to-end testing to ensure each tool is in
 | resilience_drill_get | Get the details of resilience drill <drill_name> in service group <service_group> |
 | resilience_drill_resource_get | List all resources (targets) of drill <drill_name> in service group <service_group> |
 | resilience_drill_resource_get | Get the drill resource <resource_name> for drill <drill_name> in service group <service_group> |
+| resilience_drill_run_get | List all runs of drill <drill_name> in service group <service_group> |
+| resilience_drill_run_get | Get the drill run <drill_run_name> for drill <drill_name> in service group <service_group> |
 | resilience_recovery_job_get | List all recovery jobs of recovery plan <recovery_plan_name> in service group <service_group> |
 | resilience_recovery_job_get | Get the details of recovery job <recovery_job_name> for recovery plan <recovery_plan_name> in service group <service_group> |
 | resilience_recovery_job_resource_get | List all resources (targets) of recovery job <recovery_job_name> for recovery plan <recovery_plan_name> in service group <service_group> |

@@ -41,6 +41,8 @@ $enrollmentName = $DeploymentOutputs['ENROLLMENTNAME']
 $goalTemplateName = $DeploymentOutputs['GOALTEMPLATENAME']
 $goalAssignmentName = $DeploymentOutputs['GOALASSIGNMENTNAME']
 $recoveryPlanName = $DeploymentOutputs['RECOVERYPLANNAME']
+$drillName = $DeploymentOutputs['DRILLNAME']
+$location = $DeploymentOutputs['LOCATION']
 
 $serviceGroupApiVersion = '2024-02-01-preview'
 $membershipApiVersion = '2023-09-01-preview'
@@ -66,11 +68,19 @@ function Invoke-ResilienceRestPut {
 
 function Invoke-ResilienceRestPost {
     param(
-        [string] $Path
+        [string] $Path,
+        [hashtable] $Body
     )
 
     Write-Host "POST $Path"
-    $response = Invoke-AzRestMethod -Method POST -Path $Path
+    if ($Body) {
+        $payload = $Body | ConvertTo-Json -Depth 20 -Compress
+        $response = Invoke-AzRestMethod -Method POST -Path $Path -Payload $payload
+    }
+    else {
+        $response = Invoke-AzRestMethod -Method POST -Path $Path
+    }
+
     if ($response.StatusCode -ge 400) {
         throw "POST $Path failed with status $($response.StatusCode): $($response.Content)"
     }
@@ -230,4 +240,67 @@ else {
     Write-Warning "No recovery job appeared after the readiness check; RECOVERYJOBNAME was not set."
 }
 
-Write-Host "Resilience test resources are ready (service group: $serviceGroupName, usage plan: $usagePlanName, enrollment: $enrollmentName, goal template: $goalTemplateName, goal assignment: $goalAssignmentName, recovery plan: $recoveryPlanName)."
+# 8) Create a drill. The service creates its drillResources from the service-group membership.
+$drillPath = "$serviceGroupResilienceBase/drills/$drillName`?api-version=$resilienceApiVersion"
+Invoke-ResilienceRestPut -Path $drillPath -Body @{
+    identity   = @{
+        type = 'SystemAssigned'
+    }
+    properties = @{
+        drillType             = 'Zonal'
+        rbacSetupMode         = 'AutomatedCustomRole'
+        metricsProperties     = @{
+            identity       = @{ type = 'SystemAssigned' }
+            metricsToTrack = @()
+        }
+        recoveryPlanProperties = @{
+            identity = @{ type = 'SystemAssigned' }
+        }
+        drillAssetProperties = @{
+            subscription = $subscriptionId
+            region       = $location
+        }
+        chaosResourceProperties = @{
+            identity                       = @{ type = 'SystemAssigned' }
+            chaosResourceIdentityForFaults = @{ type = 'SystemAssigned' }
+        }
+    }
+} | Out-Null
+Wait-ResilienceProvisioning -Path $drillPath
+
+# 9) Start a drill run so the drill run/resource live tests have a real run to read.
+# The start action returns a jobId pointing at the newly created drillRuns/{guid} resource;
+# the run itself is provisioned asynchronously, so poll the list until one shows up.
+$startDrillPath = "$drillPath/start`?api-version=$resilienceApiVersion"
+Invoke-ResilienceRestPost -Path $startDrillPath -Body @{ mode = 'Failover' } | Out-Null
+
+$drillRunsPath = "$drillPath/drillRuns`?api-version=$resilienceApiVersion"
+$drillRunName = $null
+$deadline = (Get-Date).AddSeconds(300)
+while (-not $drillRunName -and (Get-Date) -lt $deadline) {
+    $drillRuns = (Invoke-AzRestMethod -Method GET -Path $drillRunsPath).Content | ConvertFrom-Json
+    $drillRunName = $drillRuns.value | Select-Object -First 1 -ExpandProperty name
+    if (-not $drillRunName) {
+        Write-Host "  waiting for drill run to appear..."
+        Start-Sleep -Seconds 15
+    }
+}
+
+if ($drillRunName) {
+    $DeploymentOutputs['DRILLRUNNAME'] = $drillRunName
+
+    $drillRunResourcesPath = "$drillPath/drillRuns/$drillRunName/drillRunTargets`?api-version=$resilienceApiVersion"
+    $drillRunResources = (Invoke-AzRestMethod -Method GET -Path $drillRunResourcesPath).Content | ConvertFrom-Json
+    $drillRunResourceName = $drillRunResources.value | Select-Object -First 1 -ExpandProperty name
+    if ($drillRunResourceName) {
+        $DeploymentOutputs['DRILLRUNRESOURCENAME'] = $drillRunResourceName
+    }
+
+    # Re-write the test settings so the newly created drill run names are available to tests.
+    New-TestSettings @PSBoundParameters -OutputPath $PSScriptRoot | Out-Null
+}
+else {
+    Write-Warning "No drill run appeared after starting the drill; DRILLRUNNAME was not set."
+}
+
+Write-Host "Resilience test resources are ready (service group: $serviceGroupName, usage plan: $usagePlanName, enrollment: $enrollmentName, goal template: $goalTemplateName, goal assignment: $goalAssignmentName, recovery plan: $recoveryPlanName, drill: $drillName)."
