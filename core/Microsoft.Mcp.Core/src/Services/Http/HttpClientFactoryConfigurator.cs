@@ -68,7 +68,7 @@ public static class HttpClientFactoryConfigurator
         var proxyUri = ResolveRecordingProxy(recordingProxyResolver);
         if (proxyUri != null)
         {
-            return new RecordingRedirectHandler(proxyUri)
+            return new RecordingRedirectHandler(proxyUri, Environment.GetEnvironmentVariable("TEST_PROXY_ARM_REGION"))
             {
                 InnerHandler = handler
             };

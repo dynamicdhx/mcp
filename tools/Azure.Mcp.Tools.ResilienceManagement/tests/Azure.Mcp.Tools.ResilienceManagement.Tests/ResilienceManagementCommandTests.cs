@@ -179,7 +179,7 @@ public class ResilienceManagementCommandTests(
         Assert.False(string.IsNullOrEmpty(assignment.AssertProperty("name").GetString()));
     }
 
-    [Fact(Skip = "The Resilience Management RP does not support in-place goal assignment update; PUT/PATCH to an existing assignment returns 400. Re-enable once the service supports update.")]
+    [Fact]
     public async Task Should_update_goal_assignment()
     {
         var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable(
@@ -187,7 +187,9 @@ public class ResilienceManagementCommandTests(
             "GOALASSIGNMENTLIFECYCLESERVICEGROUPNAME");
         var goalAssignment = RegisterOrRetrieveDeploymentOutputVariable("goalAssignmentUpdateName", "GOALASSIGNMENTUPDATENAME");
         var goalTemplate = RegisterOrRetrieveDeploymentOutputVariable("goalTemplateName", "GOALTEMPLATENAME");
-        var virtualMachineId = RegisterOrRetrieveDeploymentOutputVariable("goalAssignmentUpdateVmId", "GOALASSIGNMENTUPDATEVMID");
+        var serviceLevelIndicatorId = RegisterOrRetrieveDeploymentOutputVariable(
+            "goalAssignmentUpdateSliId",
+            "GOALASSIGNMENTUPDATESLIID");
 
         var result = await CallToolAsync(
             "resilience_goal_assignment_update",
@@ -196,8 +198,8 @@ public class ResilienceManagementCommandTests(
                 { "tenant", Settings.TenantId },
                 { "service-group", serviceGroup },
                 { "goal-assignment", goalAssignment },
-                { "service-level-indicator-resource-id", virtualMachineId },
-                { "service-level-objective-resource-id", virtualMachineId }
+                { "service-level-indicator-resource-id", serviceLevelIndicatorId },
+                { "service-level-objective-resource-id", serviceLevelIndicatorId }
             });
 
         var assignment = result.AssertProperty("goalAssignment");
@@ -205,6 +207,37 @@ public class ResilienceManagementCommandTests(
         var properties = assignment.AssertProperty("properties");
         Assert.Equal("Succeeded", properties.AssertProperty("provisioningState").GetString());
         Assert.EndsWith($"/goalTemplates/{goalTemplate}", properties.AssertProperty("goalTemplateId").GetString(), StringComparison.OrdinalIgnoreCase);
+        var serviceLevelResource = Assert.Single(properties.AssertProperty("serviceLevelResources").EnumerateArray());
+        Assert.Equal(serviceLevelIndicatorId, serviceLevelResource.AssertProperty("serviceLevelIndicatorResourceId").GetString(), StringComparer.OrdinalIgnoreCase);
+        Assert.Equal(serviceLevelIndicatorId, serviceLevelResource.AssertProperty("serviceLevelObjectiveResourceId").GetString(), StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Should_update_goal_assignment_return_not_found()
+    {
+        var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable(
+            "goalAssignmentLifecycleServiceGroupName",
+            "GOALASSIGNMENTLIFECYCLESERVICEGROUPNAME");
+        var goalAssignment = RegisterOrRetrieveVariable("missingGoalAssignment", $"missing-{Guid.NewGuid():N}");
+        var serviceLevelIndicatorId = RegisterOrRetrieveDeploymentOutputVariable(
+            "goalAssignmentUpdateSliId",
+            "GOALASSIGNMENTUPDATESLIID");
+
+        var response = await CallToolAsync(
+            "resilience_goal_assignment_update",
+            new()
+            {
+                { "tenant", Settings.TenantId },
+                { "service-group", serviceGroup },
+                { "goal-assignment", goalAssignment },
+                { "service-level-indicator-resource-id", serviceLevelIndicatorId },
+                { "service-level-objective-resource-id", serviceLevelIndicatorId }
+            },
+            resultProcessor: result => result);
+
+        Assert.Equal(404, response.AssertProperty("status").GetInt32());
+        Assert.Contains("not found", response.AssertProperty("message").GetString(), StringComparison.OrdinalIgnoreCase);
+        Assert.False(response.AssertProperty("results").TryGetProperty("goalAssignment", out _));
     }
 
     [Fact]
@@ -240,30 +273,6 @@ public class ResilienceManagementCommandTests(
 
         Assert.False(secondResult.AssertProperty("deleted").GetBoolean());
         Assert.Equal(goalAssignment, secondResult.AssertProperty("goalAssignment").GetString());
-    }
-
-    [Fact]
-    public async Task Should_create_or_update_goal_assignment()
-    {
-        var serviceGroup = RegisterOrRetrieveDeploymentOutputVariable("serviceGroupName", "GOALASSIGNMENTLIFECYCLESERVICEGROUPNAME");
-        var goalTemplate = RegisterOrRetrieveDeploymentOutputVariable("goalTemplateName", "GOALTEMPLATENAME");
-        RegisterVariable("createdGoalAssignmentName", $"gac{Guid.NewGuid():N}"[..24]);
-        var goalAssignment = TestVariables["createdGoalAssignmentName"];
-
-        var result = await CallToolAsync(
-            "resilience_goal_assignment_create",
-            new()
-            {
-                { "tenant", Settings.TenantId },
-                { "service-group", serviceGroup },
-                { "goal-assignment", goalAssignment },
-                { "goal-template", goalTemplate }
-            });
-
-        var assignment = result.AssertProperty("goalAssignment");
-        Assert.False(string.IsNullOrEmpty(assignment.AssertProperty("name").GetString()));
-        Assert.EndsWith($"/goalAssignments/{goalAssignment}", assignment.AssertProperty("id").GetString(), StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("Succeeded", assignment.AssertProperty("properties").AssertProperty("provisioningState").GetString());
     }
 
     [Fact]

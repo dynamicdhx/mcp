@@ -13,6 +13,25 @@ $ErrorActionPreference = "Stop"
 . "$PSScriptRoot/../../../eng/common/scripts/common.ps1"
 . "$PSScriptRoot/../../../eng/scripts/helpers/TestResourcesHelpers.ps1"
 
+$goalAssignmentLifecycleServiceGroupName = $DeploymentOutputs['GOALASSIGNMENTLIFECYCLESERVICEGROUPNAME']
+$goalAssignmentUpdateSliId = $AdditionalParameters['goalAssignmentUpdateSliId']
+if ($goalAssignmentUpdateSliId) {
+    $expectedSliPrefix = "/providers/Microsoft.Management/serviceGroups/$goalAssignmentLifecycleServiceGroupName/providers/Microsoft.Monitor/slis/"
+    if (-not $goalAssignmentUpdateSliId.StartsWith($expectedSliPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        $goalAssignmentUpdateSliId.Substring($expectedSliPrefix.Length) -notmatch '^[^/]+$') {
+        throw 'goalAssignmentUpdateSliId must identify an SLI in the goal assignment lifecycle service group.'
+    }
+    $sliResponse = Invoke-AzRestMethod -Method GET -Path "$goalAssignmentUpdateSliId`?api-version=2025-03-01-preview"
+    if ($sliResponse.StatusCode -ne 200 -or
+        ($sliResponse.Content | ConvertFrom-Json).properties.provisioningState -ne 'Succeeded') {
+        throw "goalAssignmentUpdateSliId must reference a readable, successfully provisioned SLI. HTTP $($sliResponse.StatusCode): $($sliResponse.Content)"
+    }
+    $DeploymentOutputs['GOALASSIGNMENTUPDATESLIID'] = $goalAssignmentUpdateSliId
+}
+else {
+    Write-Warning 'Goal assignment update recording requires AdditionalParameters.goalAssignmentUpdateSliId for an existing SLI in the goal assignment lifecycle service group.'
+}
+
 $testSettings = New-TestSettings @PSBoundParameters -OutputPath $PSScriptRoot
 
 # $testSettings contains:
@@ -344,6 +363,13 @@ $lifecycleMembershipPath = "/subscriptions/$subscriptionId/resourceGroups/$Resou
 Invoke-ResilienceRestPut -Path $lifecycleMembershipPath -Body @{
     properties = @{
         targetId = $lifecycleServiceGroupId
+    }
+} | Out-Null
+
+$goalAssignmentLifecycleMembershipPath = "/subscriptions/$subscriptionId/resourceGroups/$ResourceGroupName/providers/Microsoft.Relationships/serviceGroupMember/rhub-goal-assignment-lifecycle-rg-member`?api-version=$membershipApiVersion"
+Invoke-ResilienceRestPut -Path $goalAssignmentLifecycleMembershipPath -Body @{
+    properties = @{
+        targetId = $goalAssignmentLifecycleServiceGroupId
     }
 } | Out-Null
 

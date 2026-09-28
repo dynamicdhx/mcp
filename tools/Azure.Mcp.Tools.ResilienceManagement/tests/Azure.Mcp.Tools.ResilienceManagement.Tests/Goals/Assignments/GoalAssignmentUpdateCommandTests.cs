@@ -15,8 +15,8 @@ namespace Azure.Mcp.Tools.ResilienceManagement.Tests.Goals.Assignments;
 
 public sealed class GoalAssignmentUpdateCommandTests : CommandUnitTestsBase<GoalAssignmentUpdateCommand, IResilienceManagementService>
 {
-    private const string IndicatorResourceId = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/vm1";
-    private const string ObjectiveResourceId = "/subscriptions/00000000-0000-0000-0000-000000000001/resourceGroups/rg1/providers/Microsoft.Compute/virtualMachines/vm2";
+    private const string IndicatorResourceId = "/providers/Microsoft.Management/serviceGroups/sg1/providers/Microsoft.Monitor/slis/sli1";
+    private const string ObjectiveResourceId = "/providers/Microsoft.Management/serviceGroups/sg1/providers/Microsoft.Monitor/slis/sli1";
     private const string ValidArgs = $"--service-group sg1 --goal-assignment assignment1 --service-level-indicator-resource-id {IndicatorResourceId} --service-level-objective-resource-id {ObjectiveResourceId} --tenant tenant1";
 
     [Fact]
@@ -79,7 +79,7 @@ public sealed class GoalAssignmentUpdateCommandTests : CommandUnitTestsBase<Goal
 
     [Theory]
     [InlineData("not-an-arm-id", ObjectiveResourceId)]
-    [InlineData(IndicatorResourceId, "/providers/Microsoft.Management/serviceGroups/sg1")]
+    [InlineData(IndicatorResourceId, "not-an-arm-id")]
     public async Task ExecuteAsync_RejectsInvalidServiceLevelResourceIds(string indicatorResourceId, string objectiveResourceId)
     {
         var response = await ExecuteCommandAsync(

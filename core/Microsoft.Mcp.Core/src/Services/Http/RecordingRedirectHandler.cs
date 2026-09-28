@@ -14,10 +14,12 @@ namespace Microsoft.Mcp.Core.Services.Http;
 /// that it rewrites the final outgoing wire request.
 /// </summary>
 /// <param name="proxyUri">The URI of the recording/replace proxy to redirect requests to.</param>
-internal sealed class RecordingRedirectHandler(Uri proxyUri) : DelegatingHandler
+/// <param name="armRegion">Optional public ARM region used only by the recording proxy.</param>
+internal sealed class RecordingRedirectHandler(Uri proxyUri, string? armRegion = null) : DelegatingHandler
 {
     private const string CosmosSerializationHeader = "x-ms-cosmos-supported-serialization-formats";
     private readonly Uri _proxyUri = proxyUri ?? throw new ArgumentNullException(nameof(proxyUri));
+    private readonly string? _armRegion = ValidateArmRegion(armRegion);
     private readonly bool _playbackTesting = EnvironmentHelpers.IsPlaybackTesting();
 
     protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -42,6 +44,10 @@ internal sealed class RecordingRedirectHandler(Uri proxyUri) : DelegatingHandler
                 Query = string.Empty,
                 Path = string.Empty
             };
+            if (_armRegion is not null && upstream.Host.Equals("management.azure.com", StringComparison.OrdinalIgnoreCase))
+            {
+                upstream.Host = $"{_armRegion}.management.azure.com";
+            }
             message.Headers.Add("x-recording-upstream-base-uri", upstream.Uri.ToString());
         }
 
@@ -59,6 +65,21 @@ internal sealed class RecordingRedirectHandler(Uri proxyUri) : DelegatingHandler
         };
 
         message.RequestUri = builder.Uri;
+    }
+
+    private static string? ValidateArmRegion(string? armRegion)
+    {
+        if (string.IsNullOrEmpty(armRegion))
+        {
+            return null;
+        }
+
+        if (armRegion.Length > 63 || !armRegion.All(char.IsAsciiLetterOrDigit))
+        {
+            throw new ArgumentException("The recording ARM region must contain only ASCII letters and digits, with at most 63 characters.", nameof(armRegion));
+        }
+
+        return armRegion.ToLowerInvariant();
     }
 
     private HttpResponseMessage StripRetryAfter(HttpResponseMessage response)

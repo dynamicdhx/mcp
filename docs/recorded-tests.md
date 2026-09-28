@@ -93,6 +93,30 @@ Follow this checklist any time you need to update recordings:
    - Updated `assets.json`
    - Optional change-log entry as needed
 
+### Regional ARM Recording
+
+For a service fix deployed only to a public Azure canary region, set `TEST_PROXY_ARM_REGION`
+in the test project's local `.testsettings.json`:
+
+```json
+{
+    "EnvironmentVariables": {
+        "TEST_PROXY_ARM_REGION": "eastus2euap"
+    }
+}
+```
+
+Merge this entry with any existing environment variables. The override applies only in
+Debug builds with a recording proxy enabled. It changes the proxy's upstream host from
+`management.azure.com` to `<region>.management.azure.com`, preserving the request path
+and query. Existing regional endpoints, sovereign clouds, and non-ARM hosts are unchanged.
+Region values must contain only ASCII letters and digits, up to 63 characters.
+
+Provision fixtures against the same regional backend before recording. A resource's
+location, or a successful cached ARM GET, does not establish that its backing service
+record exists in that region. Use the same override for playback of regional recordings.
+Do not publish recordings until both the live assertions and playback pass.
+
 ### Helpful Commands
 
 | Scenario | Command |

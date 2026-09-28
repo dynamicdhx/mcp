@@ -4211,12 +4211,6 @@ azmcp resilience goal template get --service-group <service-group> \
 azmcp resilience goal assignment get --service-group <service-group> \
                                      [--name <name>]
 
-# Create or update a resilience goal assignment using an existing legacy goal template
-# ✅ Destructive | ✅ Idempotent | ❌ OpenWorld | ❌ ReadOnly | ❌ Secret | ❌ LocalRequired
-azmcp resilience goal assignment create --service-group <service-group> \
-                                        --goal-assignment <goal-assignment> \
-                                        --goal-template <goal-template>
-
 # Update an existing resilience goal assignment with a service-level resource mapping.
 # ✅ Destructive | ✅ Idempotent | ❌ OpenWorld | ❌ ReadOnly | ❌ Secret | ❌ LocalRequired
 azmcp resilience goal assignment update --service-group <service-group> \

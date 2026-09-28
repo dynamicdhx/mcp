@@ -101,7 +101,7 @@ public sealed class GoalAssignmentUpdateCommand(
 
     private static void ValidateResourceId(string value, string resourceName, ValidationResult validationResult)
     {
-        if (!ResourceIdentifier.TryParse(value, out ResourceIdentifier? resourceId) || string.IsNullOrEmpty(resourceId?.SubscriptionId))
+        if (!ResourceIdentifier.TryParse(value, out _))
         {
             validationResult.Errors.Add($"The {resourceName} ID must be a valid Azure resource ID.");
         }
